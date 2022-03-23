@@ -35,6 +35,16 @@ declare module "opensea-scraper" {
     slug: string,
     options?: IOptions,
   ): Promise<IOfferRturnValue>;
+  export function offersByScrolling(
+    slug: string,
+    result: number,
+    options?: IOptions,
+  ): Promise<IOfferRturnValue>;
+  export function offersByScrollingByUrl(
+    url: string,
+    result: number,
+    options?: IOptions,
+  ): Promise<IOfferRturnValue>;
   export function offersByUrl(
     url: string,
     options?: IOptions,
