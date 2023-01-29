@@ -6,7 +6,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 // load helper function to detect stealth plugin
-const { warnIfNotUsingStealth } = require("../helpers/helperFunctions.js");
+const { warnIfNotUsingStealth, sleep } = require("../helpers/helperFunctions.js");
 
 /**
  * Scrapes all collections from the Rankings page at https://opensea.io/rankings
@@ -17,14 +17,15 @@ const { warnIfNotUsingStealth } = require("../helpers/helperFunctions.js");
  *   browserInstance: browser instance created with puppeteer.launch() (bring your own puppeteer instance)
  * }
  */
-const rankings = async (type = "total", optionsGiven = {}) => {
+const rankings = async (type = "total", chain = undefined, optionsGiven = {}) => {
   const optionsDefault = {
     debug: false,
     logs: false,
+    additionalWait: 0, // waittime in milliseconds, after page loaded, but before stating to scrape
     browserInstance: undefined,
   };
   const options = { ...optionsDefault, ...optionsGiven };
-  const { debug, logs, browserInstance } = options;
+  const { debug, logs, additionalWait, browserInstance } = options;
   const customPuppeteerProvided = Boolean(optionsGiven.browserInstance);
   logs && console.log(`=== OpenseaScraper.rankings() ===\n`);
 
@@ -39,14 +40,20 @@ const rankings = async (type = "total", optionsGiven = {}) => {
   customPuppeteerProvided && warnIfNotUsingStealth(browser);
 
   const page = await browser.newPage();
-  const url = getUrl(type);
+  const url = getUrl(type, chain);
   logs && console.log("...opening url: " + url);
   await page.goto(url);
 
   logs && console.log("...🚧 waiting for cloudflare to resolve");
   await page.waitForSelector('.cf-browser-verification', {hidden: true});
 
-  logs && console.log("extracting __NEXT_DATA variable");
+  // additional wait?
+  if (additionalWait > 0) {
+    logs && console.log(`...additional wait active, waiting ${additionalWait / 1000} seconds...`);
+    await sleep(additionalWait);
+  }
+
+  logs && console.log("...extracting __NEXT_DATA variable");
   const __NEXT_DATA__ = await page.evaluate(() => {
     const nextDataStr = document.getElementById("__NEXT_DATA__").innerText;
     return JSON.parse(nextDataStr);
@@ -59,45 +66,53 @@ const rankings = async (type = "total", optionsGiven = {}) => {
 }
 
 function _parseNextDataVarible(__NEXT_DATA__) {
-  const extractFloorPrice = (statsV2) => {
+  const extractFloorPrice = (windowCollectionStats, extractionMethod) => {
     try {
+      if (extractionMethod === "multichain") {
+        return {
+          amount: Number(windowCollectionStats.floorPrice.unit),
+          currency: windowCollectionStats.floorPrice.symbol.toUpperCase(),
+        }
+      }
       return {
-        amount: Number(statsV2.floorPrice.eth),
+        amount: Number(windowCollectionStats.floorPrice.eth),
         currency: "ETH",
       }
     } catch(err) {
       return null;
     }
   }
-  const extractCollection = (obj) => {
+  const extractCollection = (node) => {
     return {
-      name: obj.name,
-      slug: obj.slug,
-      logo: obj.logo,
-      isVerified: obj.isVerified,
-      floorPrice: extractFloorPrice(obj.statsV2),
-      // statsV2: obj.statsV2, // 🚧 comment back in if you need additional stats
+      name: node.name,
+      slug: node.slug,
+      logo: node.logo,
+      isVerified: node.isVerified,
+      floorPrice: extractFloorPrice(node.windowCollectionStats),
+      floorPriceMultichain: extractFloorPrice(node.windowCollectionStats, "multichain"),
+      // statsV2: node.statsV2, // 🚧 comment back in if you need additional stats
+      // windowCollectionStats: node.windowCollectionStats, // 🚧 comment back in if you need additional stats
     };
   }
   return __NEXT_DATA__.props.relayCache[0][1].json.data.rankings.edges.map(obj => extractCollection(obj.node));
 }
 
-function getUrl(type) {
+function getUrl(type, chain) {
+  chainExtraQueryParameter = chain ? `&chain=${chain}` : ''
   if (type === "24h") {
-    return "https://opensea.io/rankings?sortBy=one_day_volume";
+    return `https://opensea.io/rankings?sortBy=one_day_volume${chainExtraQueryParameter}`;
 
   } else if (type === "7d") {
-    return "https://opensea.io/rankings?sortBy=seven_day_volume";
+    return `https://opensea.io/rankings?sortBy=seven_day_volume${chainExtraQueryParameter}`;
 
   } else if (type === "30d") {
-    return "https://opensea.io/rankings?sortBy=thirty_day_volume";
+    return `https://opensea.io/rankings?sortBy=thirty_day_volume${chainExtraQueryParameter}`;
 
   } else if (type === "total") {
-    return "https://opensea.io/rankings?sortBy=total_volume";
-
-  } else {
-    throw new Error(`Invalid type provided. Expected: 24h,7d,30d,total. Got: ${type}`);
+    return `https://opensea.io/rankings?sortBy=total_volume${chainExtraQueryParameter}`;
   }
+
+  throw new Error(`Invalid type provided. Expected: 24h,7d,30d,total. Got: ${type}`);
 }
 module.exports = rankings;
 

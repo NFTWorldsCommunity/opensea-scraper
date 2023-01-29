@@ -6,7 +6,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 // load helper function to detect stealth plugin
-const { warnIfNotUsingStealth } = require("../helpers/helperFunctions.js");
+const { warnIfNotUsingStealth, sleep } = require("../helpers/helperFunctions.js");
 
 /**
  * scrapes opensea offers for a given collection.
@@ -47,10 +47,11 @@ const offersByUrl = async (url, optionsGiven = {}) => {
     debug: false,
     logs: false,
     sort: true, // sorts the returned offers by lowest to highest price
+    additionalWait: 0, // waittime in milliseconds, after page loaded, but before stating to scrape
     browserInstance: undefined,
   };
   const options = { ...optionsDefault, ...optionsGiven };
-  const { debug, logs, browserInstance, sort } = options;
+  const { debug, logs, browserInstance, sort, additionalWait } = options;
   const customPuppeteerProvided = Boolean(optionsGiven.browserInstance);
 
   // add mandatory query params
@@ -87,10 +88,20 @@ const offersByUrl = async (url, optionsGiven = {}) => {
   logs && console.log("🚧 waiting for cloudflare to resolve...");
   await page.waitForSelector('.cf-browser-verification', {hidden: true});
 
+  // additional wait?
+  if (additionalWait > 0) {
+    logs && console.log(`additional wait active, waiting ${additionalWait / 1000} seconds...`);
+    await sleep(additionalWait);
+  }
+
   // extract __wired__ variable
   logs && console.log("extracting __wired__ variable");
   const html = await page.content();
   const __wired__ = _parseWiredVariable(html);
+  
+  // extract testnet
+  const isTestnet = url.includes("testnets.opensea.io");
+  logs && console.log("extracting if testnet detected... isTestnet = " + isTestnet);
 
   if (!customPuppeteerProvided && !debug) {
     logs && console.log("closing browser...");
@@ -99,7 +110,7 @@ const offersByUrl = async (url, optionsGiven = {}) => {
 
   logs && console.log("extracting offers and stats from __wired__ variable");
   return {
-    offers: _extractOffers(__wired__, { sort }),
+    offers: _extractOffers(__wired__, sort, isTestnet),
     stats: _extractStats(__wired__),
   };
 }
@@ -118,7 +129,7 @@ function _extractStats(__wired__) {
     return "stats not availible. Report issue if you think this is a bug: https://github.com/dcts/opensea-scraper/issues/new";
   }
 }
-function _extractOffers(__wired__, { sort = true } = {}) {
+function _extractOffers(__wired__, sort = true, isTestnet = false) {
   // create currency dict to extract different offer currencies
   const currencyDict = {};
   Object.values(__wired__.records)
@@ -143,12 +154,12 @@ function _extractOffers(__wired__, { sort = true } = {}) {
 
   // get all floorPrices (all currencies)
   const floorPrices = Object.values(__wired__.records)
-    .filter(o => o.__typename === "AssetQuantityType")
-    .filter(o => o.quantityInEth)
+    .filter(o => o.__typename === "PriceType" && o.eth && o.unit && o.usd)
+    .filter(o => o.eth)
     .map(o => {
       return {
-        amount: o.quantity / 1000000000000000000,
-        currency: currencyDict[o.asset.__ref].symbol,
+        amount: Number(o.eth),
+        currency: 'ETH',
       }
     });
 
@@ -159,12 +170,19 @@ function _extractOffers(__wired__, { sort = true } = {}) {
       const assetContract = _extractAssetContract(o, assetContractDict);
       const tokenId = o.tokenId;
       const contractAndTokenIdExist = Boolean(assetContract) && Boolean(tokenId);
+      const createOfferUrl = (assetContract, tokenId, isTestnet) => {
+        if (isTestnet) {
+          return `https://testnets.opensea.io/assets/rinkeby/${assetContract}/${tokenId}`;
+        } else {
+          return `https://opensea.io/assets/${assetContract}/${tokenId}`;
+        }
+      }
       return {
-        name: o.name,
+        name: o.name || tokenId || null, // tokenId as name if name===null (e.g. BoredApeYachtClub nfts do not have name)
         tokenId: tokenId,
         displayImageUrl: o.displayImageUrl,
         assetContract: assetContract,
-        offerUrl: contractAndTokenIdExist ? `https://opensea.io/assets/${assetContract}/${tokenId}` : undefined,
+        offerUrl: contractAndTokenIdExist ? createOfferUrl(assetContract, tokenId, isTestnet) : undefined,
       };
     });
 

@@ -3,10 +3,10 @@ const OpenseaScraper = require("./src/index.js");
 // switch on/off which function to demo
 const demoBasicInfo = true;
 const demoOffers = true;
-const demoOffersByUrl = true;
+const demoOffersByUrl = true; 
 const demoRankings = true;
-const demoOffersByScrolling = true;
-const demoOffersByScrollingByUrl = true;
+const demoOffersByScrolling = false; // CURRENTLY NOT WORKING
+const demoOffersByScrollingByUrl = false; // CURRENTLY NOT WORKING
 
 // which NFT project to scrape?
 const slug = "cool-cats-nft";
@@ -14,8 +14,9 @@ const options = {
   debug: false,
   sort: true,
   logs: true,
+  additionalWait: 0,
   browserInstance: undefined,
-}
+};
 console.log(`===>>> ${slug} <<<===`);
 console.log("OPTIONS:");
 console.log(options);
@@ -40,9 +41,8 @@ console.log(options);
 
   // get offersByUrl
   if (demoOffersByUrl) {
-    // const urlSandbox = "https://opensea.io/collection/sandbox?search[sortAscending]=true&search[sortBy]=PRICE&search[stringTraits][0][name]=Type&search[stringTraits][0][values][0]=Land&search[toggles][0]=BUY_NOW";
     console.log(`\n\n\n\n✅ === OpenseaScraper.offersByUrl(url, resultSize) ===`);
-    const url = "https://opensea.io/collection/boredapeyachtclub?search[sortAscending]=true&search[sortBy]=PRICE&search[stringTraits][0][name]=Background&search[stringTraits][0][values][0]=Purple&search[stringTraits][1][name]=Earring&search[stringTraits][1][values][0]=Silver%20Hoop&search[stringTraits][2][name]=Eyes&search[stringTraits][2][values][0]=Bloodshot";
+    const url = "https://opensea.io/collection/boredapeyachtclub?search[sortAscending]=true&search[sortBy]=PRICE&search[stringTraits][0][name]=Background&search[stringTraits][0][values][0]=Purple&search[stringTraits][1][name]=Eyes&search[stringTraits][1][values][0]=Bloodshot&search[toggles][0]=BUY_NOW";
     const resultByUrl = await OpenseaScraper.offersByUrl(url, options);
     console.log(`total Offers: ${resultByUrl.stats.totalOffers}`);
     console.log(`top 3 Offers`);
@@ -53,7 +53,8 @@ console.log(options);
   if (demoRankings) {
     console.log(`\n\n\n\n✅ === OpenseaScraper.rankings() ===`);
     console.log(`scraping ranking (last 24h)`);
-    const rankings = await OpenseaScraper.rankings("24h", options);
+    const chain = "solana";
+    const rankings = await OpenseaScraper.rankings("24h", chain, options);
     console.log(`scraped ${rankings.length} collections: ${rankings.map(o => o.slug).join(" | ")}`);
   }
 

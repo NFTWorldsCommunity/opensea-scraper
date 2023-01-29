@@ -6,12 +6,12 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 // load helper function to detect stealth plugin
-const { warnIfNotUsingStealth } = require("../helpers/helperFunctions.js");
+const { warnIfNotUsingStealth, sleep } = require("../helpers/helperFunctions.js");
 
 /**
  * scrapes opensea offers for a given collection by scrolling
  * through the page and fetching all offers "manually".
- * if you need less than 32 offers, please use the regular `offers()`
+ * if you need less than 20 offers, please use the regular `offers()`
  * method, since it is significantly more efficient.
  *
  * INPUTS:
@@ -54,10 +54,11 @@ const offersByScrollingByUrl = async (url, resultSize, optionsGiven = {}) => {
     debug: false,
     logs: false,
     sort: true, // sorts the returned offers by lowest to highest price
+    additionalWait: 0, // waittime in milliseconds, after page loaded, but before stating to scrape
     browserInstance: undefined,
   };
   const options = { ...optionsDefault, ...optionsGiven };
-  const { debug, logs, browserInstance, sort } = options;
+  const { debug, logs, browserInstance, sort, additionalWait } = options;
   const customPuppeteerProvided = Boolean(optionsGiven.browserInstance);
 
   // add mandatory query params
@@ -93,6 +94,12 @@ const offersByScrollingByUrl = async (url, resultSize, optionsGiven = {}) => {
   // ...🚧 waiting for cloudflare to resolve
   logs && console.log("🚧 waiting for cloudflare to resolve");
   await page.waitForSelector('.cf-browser-verification', {hidden: true});
+
+  // additional wait?
+  if (additionalWait > 0) {
+    logs && console.log(`additional wait active, waiting ${additionalWait / 1000} seconds...`);
+    await sleep(additionalWait);
+  }
 
   // expose all helper functions
   logs && console.log("expose all helper functions");
